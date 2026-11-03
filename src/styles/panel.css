@@ -1,0 +1,898 @@
+/* 面板样式（Shadow Root 内与宿主双向隔离）：设计 token 全走 --uh-* 变量 */
+
+:host {
+  all: initial;
+  color-scheme: light;
+
+  /* 设计 token —— 换主题只改这里 */
+  --uh-accent: #0e9384;
+  --uh-accent-weak: color-mix(in srgb, var(--uh-accent) 11%, transparent);
+  --uh-bg: #fbfcfa;
+  --uh-bg-soft: #f0f3f0;
+  --uh-fg: #1d2a28;
+  --uh-fg-muted: #667572;
+  --uh-line: #e1e7e2;
+  --uh-success: #2f9e63;
+  --uh-danger: #cf4f4e;
+  --uh-shadow: 0 12px 40px rgba(29, 42, 40, 0.13), 0 2px 8px rgba(29, 42, 40, 0.06);
+  --uh-radius: 12px;
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--uh-fg);
+  text-align: left;
+}
+
+/* 暗色主题：App.vue 在 settings.darkFollow && 系统暗色时给根节点 data-dark */
+.uh-root[data-dark='true'] {
+  color-scheme: dark;
+  /* 暗色下主色提亮一档，保证在墨青底上的对比度 */
+  --uh-accent: #3ec9b2;
+  --uh-bg: #14191a;
+  --uh-bg-soft: #1c2324;
+  --uh-fg: #e3e9e7;
+  --uh-fg-muted: #8a9694;
+  --uh-line: #293133;
+  --uh-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+  /* 暗色下风险色提亮一档 */
+  --uh-tone-mid: #e6b84c;
+  --uh-tone-warn: #f08b3a;
+}
+
+.uh-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2147483646;
+  /* color 必须声明在 .uh-root：暗色变量覆盖于此，:host 收不到 */
+  color: var(--uh-fg);
+}
+
+/* all:initial 后 box-sizing 回到 content-box，需整体重置回 border-box */
+.uh-root,
+.uh-root *,
+.uh-root *::before,
+.uh-root *::after {
+  box-sizing: border-box;
+}
+
+/* 配色切换过渡：变量翻转时颜色平滑变化。放在前部，
+   后面自带 transition 的控件会整条覆盖（它们的列表都含颜色属性，不冲突） */
+.uh-root,
+.uh-root *,
+.uh-root *::before,
+.uh-root *::after {
+  transition: background-color 0.25s ease-out, color 0.25s ease-out,
+    border-color 0.25s ease-out, box-shadow 0.25s ease-out;
+}
+
+.uh-root button {
+  pointer-events: auto;
+}
+
+/* Dock ↔ 面板互斥切换：面板从左滑出/收回。位移必须叠加在停靠位的
+   translateY(-50%) 之上（双类选择器压过 .uh-panel/.uh-dock 基础规则）；
+   拖拽后 inline transform: none 优先，自动退化为纯淡入淡出 */
+.uh-slide-enter-active,
+.uh-slide-leave-active {
+  transition: opacity 0.2s ease-out, transform 0.25s ease-out;
+}
+
+.uh-panel.uh-slide-enter-from,
+.uh-panel.uh-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-50%) translateX(-24px);
+}
+
+.uh-dock.uh-slide-enter-from,
+.uh-dock.uh-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-50%) translateX(-100%);
+}
+
+/* Dock：贴左缘竖排图标钮 */
+.uh-dock {
+  pointer-events: auto;
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  background: var(--uh-bg);
+  border: 1px solid var(--uh-line);
+  border-left: none;
+  border-radius: 0 var(--uh-radius) var(--uh-radius) 0;
+  box-shadow: var(--uh-shadow);
+}
+
+.uh-dock-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--uh-fg-muted);
+  cursor: pointer;
+  transition: background 0.2s ease-out, color 0.2s ease-out;
+}
+
+.uh-dock-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+
+.uh-dock-btn:hover {
+  background: var(--uh-bg-soft);
+  color: var(--uh-fg);
+}
+
+.uh-dock-btn.active {
+  background: var(--uh-accent-weak);
+  color: var(--uh-accent);
+}
+
+/* 面板卡片 */
+.uh-panel {
+  pointer-events: auto;
+  position: fixed;
+  left: 64px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 80px));
+  /* 高度固定不随 tab 内容伸缩：切 tab 时面板不变形不挪位，矮内容在滚动区内留白 */
+  height: min(560px, calc(100vh - 48px));
+  background: var(--uh-bg);
+  border: 1px solid var(--uh-line);
+  border-radius: var(--uh-radius);
+  box-shadow: var(--uh-shadow);
+  overflow: hidden;
+}
+
+.uh-panel.dragging {
+  user-select: none;
+}
+
+.uh-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  background: linear-gradient(115deg, var(--uh-accent-weak), transparent 70%);
+}
+
+.uh-panel.dragging .uh-panel-header {
+  cursor: grabbing;
+}
+
+.uh-panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.uh-panel-version {
+  color: var(--uh-fg-muted);
+  font-size: 10px;
+  border: 1px solid var(--uh-line);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+.uh-close {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--uh-fg-muted);
+  cursor: pointer;
+  transition: background 0.2s ease-out, color 0.2s ease-out;
+}
+
+.uh-close svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.uh-close:hover {
+  background: var(--uh-bg-soft);
+  color: var(--uh-fg);
+}
+
+/* Tabs */
+.uh-tabs {
+  display: flex;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--uh-line);
+}
+
+/* 平铺等分：整格都是点击热区，不用精确点在文字上 */
+.uh-tab {
+  flex: 1;
+  padding: 9px 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--uh-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: color 0.2s ease-out, border-color 0.2s ease-out;
+}
+
+.uh-tab:hover {
+  color: var(--uh-fg);
+}
+
+.uh-tab.active {
+  color: var(--uh-accent);
+  border-bottom-color: var(--uh-accent);
+  font-weight: 600;
+}
+
+.uh-panel-body {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 14px 16px 16px;
+}
+
+/* Switch */
+.uh-switch {
+  flex-shrink: 0;
+  display: block;
+  width: 32px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 20%, transparent);
+  color: var(--uh-fg-muted);
+  cursor: pointer;
+  outline-offset: 2px;
+  transition: background 0.2s ease-out;
+}
+
+.uh-switch .bar {
+  position: relative;
+  display: block;
+  height: 100%;
+}
+
+.uh-switch .thumb {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--uh-bg);
+  border: 1px solid var(--uh-line);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  transition: left 0.2s ease-out, background 0.2s ease-out, border-color 0.2s ease-out;
+}
+
+.uh-root[data-dark='true'] .uh-switch .thumb {
+  background: var(--uh-bg-soft);
+}
+
+.uh-switch.checked {
+  background: color-mix(in srgb, var(--uh-accent) 35%, transparent);
+}
+
+.uh-switch.checked .thumb {
+  left: calc(100% - 18px);
+  background: var(--uh-accent);
+  border-color: transparent;
+}
+
+.uh-switch.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Input */
+.uh-input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--uh-line);
+  border-radius: 7px;
+  background: var(--uh-bg);
+  color: var(--uh-fg);
+  font: inherit;
+  font-size: 12px;
+  transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+.uh-input:focus {
+  outline: none;
+  border-color: var(--uh-accent);
+  box-shadow: 0 0 0 3px var(--uh-accent-weak);
+}
+
+/* 滑条（档位选择）：原生 range + accent-color 着色 */
+.uh-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.uh-slider-track {
+  flex: 1;
+  min-width: 0;
+}
+
+.uh-slider input[type='range'] {
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--uh-accent);
+  cursor: pointer;
+}
+
+/* 档位标签行：与轨道停靠点对齐（首尾贴边，中间均分） */
+.uh-slider-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1px;
+  font-size: 9px;
+  color: var(--uh-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.uh-slider-value {
+  min-width: 30px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--uh-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 风险分级着色（滑条当前值等语义色） */
+.tone-ok {
+  color: var(--uh-accent);
+}
+
+.tone-mid {
+  color: var(--uh-tone-mid, #b7791f);
+}
+
+.tone-warn {
+  color: var(--uh-tone-warn, #d9730d);
+}
+
+.tone-bad {
+  color: var(--uh-danger);
+}
+
+.uh-input::placeholder {
+  color: var(--uh-fg-muted);
+}
+
+/* 任务列表：开关 + 名称 + 可展开详情 */
+.uh-feature {
+  border: 1px solid var(--uh-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  transition: border-color 0.2s ease-out;
+}
+
+.uh-feature:first-child {
+  margin-top: 0;
+}
+
+.uh-feature-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.uh-feature-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.uh-feature-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.uh-feature-desc {
+  color: var(--uh-fg-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* 功能依赖未满足（如 AI 未配置）时的禁用提示 */
+.uh-feature-warn {
+  margin: 2px 0 0;
+  padding: 0 12px;
+  color: var(--uh-danger);
+  font-size: 10px;
+}
+
+.uh-feature-detail {
+  margin-top: 10px;
+}
+
+.uh-progress {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--uh-bg-soft);
+  overflow: hidden;
+}
+
+.uh-progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--uh-accent);
+  transition: width 0.4s ease-out, background-color 0.25s ease-out;
+}
+
+.uh-progress-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--uh-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 状态页：任务头部 / 进度 / 当前题 / 题号导航 / 空态（对齐 study 的 TaskPanel） */
+.uh-task-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0 10px;
+}
+
+.uh-task-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--uh-accent-weak);
+  color: var(--uh-accent);
+}
+
+.uh-task-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.uh-task-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.uh-task-title span {
+  font-size: 10px;
+  color: var(--uh-fg-muted);
+}
+
+.uh-task-title h2 {
+  margin: 1px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uh-task-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--uh-accent);
+  background: var(--uh-accent-weak);
+}
+
+.uh-task-badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.uh-task-badge.is-waiting {
+  color: var(--uh-fg-muted);
+  background: var(--uh-bg-soft);
+}
+
+.uh-task-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--uh-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 高级页用量四宫格 */
+.uh-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.uh-usage-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--uh-bg-soft);
+  font-size: 10px;
+  color: var(--uh-fg-muted);
+}
+
+.uh-usage-item strong {
+  font-size: 14px;
+  color: var(--uh-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.uh-task .uh-progress {
+  margin-top: 6px;
+}
+
+.uh-question {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--uh-line);
+  border-radius: 10px;
+  background: var(--uh-bg-soft);
+}
+
+.uh-question-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.uh-question-no {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--uh-accent);
+}
+
+.uh-answer-status {
+  font-size: 10px;
+  color: var(--uh-fg-muted);
+}
+
+.uh-answer-status.primary {
+  color: var(--uh-success);
+}
+
+.uh-answer-status.danger {
+  color: var(--uh-danger);
+}
+
+.uh-question h3 {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.uh-question-answer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--uh-line);
+}
+
+.uh-question-answer > span {
+  font-size: 10px;
+  color: var(--uh-fg-muted);
+}
+
+.uh-question-answer pre {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.uh-question-answer p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--uh-fg-muted);
+}
+
+.uh-question-nav {
+  margin-top: 12px;
+}
+
+.uh-question-nav > span {
+  font-size: 10px;
+  color: var(--uh-fg-muted);
+}
+
+.uh-question-nav-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(28px, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.uh-question-nav-grid button {
+  height: 26px;
+  border: 1px solid var(--uh-line);
+  border-radius: 7px;
+  background: var(--uh-bg);
+  color: var(--uh-fg-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color 0.25s ease-out, border-color 0.25s ease-out, color 0.15s;
+}
+
+.uh-question-nav-grid button.primary {
+  border-color: transparent;
+  color: var(--uh-success);
+  background: color-mix(in srgb, var(--uh-success) 12%, transparent);
+}
+
+.uh-question-nav-grid button.danger {
+  border-color: transparent;
+  color: var(--uh-danger);
+  background: color-mix(in srgb, var(--uh-danger) 12%, transparent);
+}
+
+.uh-question-nav-grid button.is-current {
+  border-color: var(--uh-accent);
+  color: var(--uh-accent);
+  font-weight: 600;
+}
+
+.uh-task-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 36px 16px 30px;
+  text-align: center;
+}
+
+.uh-task-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 4px;
+  border-radius: 14px;
+  background: var(--uh-bg-soft);
+  color: var(--uh-fg-muted);
+}
+
+.uh-task-empty-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.uh-task-empty h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.uh-task-empty p {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--uh-fg-muted);
+}
+
+/* 设置表单 */
+.uh-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--uh-line);
+}
+
+.uh-field:last-child {
+  border-bottom: none;
+}
+
+.uh-field-label {
+  min-width: 0;
+}
+
+.uh-field-label label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.uh-field-label p {
+  margin: 2px 0 0;
+  color: var(--uh-fg-muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.uh-field .uh-input {
+  width: 110px;
+}
+
+/* 堆叠变体：标签在上，控件独占一行（AI 配置等长输入用） */
+.uh-field.stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.uh-field.stack .uh-input {
+  width: 100%;
+}
+
+/* 高级页：危险操作按钮 */
+.uh-btn-danger {
+  padding: 5px 12px;
+  border: 1px solid color-mix(in srgb, var(--uh-danger) 45%, transparent);
+  border-radius: 8px;
+  background: none;
+  color: var(--uh-danger);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.25s ease-out, border-color 0.25s ease-out, color 0.15s;
+}
+
+.uh-btn-danger:hover {
+  background: color-mix(in srgb, var(--uh-danger) 10%, transparent);
+}
+
+/* 高级页：普通操作按钮（测试连接等） */
+.uh-btn {
+  padding: 5px 12px;
+  border: 1px solid color-mix(in srgb, var(--uh-fg) 25%, transparent);
+  border-radius: 8px;
+  background: none;
+  color: var(--uh-fg);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.25s ease-out, border-color 0.25s ease-out, color 0.15s;
+}
+
+.uh-btn:hover {
+  background: color-mix(in srgb, var(--uh-fg) 10%, transparent);
+}
+
+.uh-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.uh-group-title {
+  margin: 14px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.uh-group:first-child .uh-group-title {
+  margin-top: 0;
+}
+
+.uh-segments {
+  position: relative;
+  display: flex;
+  margin-top: 8px;
+  padding: 4px;
+  border-radius: 9px;
+  background: var(--uh-bg-soft);
+}
+
+/* 选中滑块：宽度按 padding-box 的 1/3 算（(100%-8px)/3），正好覆盖一格 */
+.uh-segments-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 3);
+  border-radius: 6px;
+  background: var(--uh-bg);
+  box-shadow: 0 1px 4px rgba(29, 42, 40, 0.08);
+  transition: transform 0.25s ease-out, background-color 0.25s ease-out,
+    box-shadow 0.25s ease-out;
+}
+
+.uh-segment {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  padding: 6px 3px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--uh-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s ease-out;
+}
+
+.uh-segment.active {
+  color: var(--uh-accent);
+  font-weight: 600;
+}
+
+/* 键值对数据行（功能详情/状态页共用） */
+.uh-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 11px;
+}
+
+.uh-kv-key {
+  flex-shrink: 0;
+  color: var(--uh-fg-muted);
+}
+
+.uh-kv-value {
+  color: var(--uh-fg);
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
