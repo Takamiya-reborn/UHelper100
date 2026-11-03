@@ -25,17 +25,6 @@ Chrome 120+ 需要先在 `chrome://extensions` → Tampermonkey → 详情里打
 - 面板：任务进度、题号导航、功能开关、用量统计；Shadow DOM 隔离 + 深浅主题
 - 所有配置本地 GM 存储持久化，卸载脚本即清除
 
-## 开发
-
-```bash
-npm run build   # 产出 dist/uhelper100.user.js（单文件，零 @require）
-```
-
-改代码后的循环：`npm run build` → Tampermonkey 里更新脚本（重新安装 dist 产物，存储会保留）→ 刷新目标页面。
-改目标站点：[vite.config.ts](vite.config.ts) 里的 `match`。
-
-目录结构：`src/tasks/` 是自动化流程（入口路由、答题、挂机、字体反混淆），`src/features/` 是功能开关注册表，`src/utils/` 是工具与平台类型，其余为面板 UI（Vue3 + Shadow DOM，手写控件，设计参考 [Bilibili-Evolved](https://github.com/the1812/Bilibili-Evolved)）。
-
 ## 声明
 
 本项目仅供学习交流使用，请自行判断、评估是否使用，由此产生的一切后果自负。
