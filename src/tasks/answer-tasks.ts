@@ -47,7 +47,8 @@ function initRuntime(name: string, items: { parsed: ParsedQuestion; el: Element 
   }));
 }
 
-// 逐题循环：返回成功匹配答案数；isAborted 为真时立即停止（不填涂不提交）
+// 逐题循环：返回成功填涂题数（作答数，不代表答对——AI 答案无法先验正确性）；
+// isAborted 为真时立即停止（不填涂不提交）
 // 对照原版：await sleep(answerInterval) → askStore.insert → getAnswers → fillAnswer → status 更新
 // 失败原因直接写入面板答案区（danger 态），不只在控制台打日志
 async function answerAll(
@@ -89,7 +90,7 @@ async function answerAll(
   return succ;
 }
 
-// 章节测验（对照 Cx.work）：解析 .TiMu → 逐题 → autoSubmitChapter/minAccuracy 提交分流
+// 章节测验（对照 Cx.work）：解析 .TiMu → 逐题 → autoSubmitChapter/minAnswerRate 提交分流
 // isAborted：换章时为真，绝不提交半套卷（原版无此保护）
 export async function runChapterWork(iframeWindow: Window, isAborted: () => boolean): Promise<void> {
   if (!assertAiReady("章节测验")) return;
@@ -110,10 +111,10 @@ export async function runChapterWork(iframeWindow: Window, isAborted: () => bool
 
   const win = iframeWindow as CxWorkWindow;
   if (settings.value.autoSubmitChapter) {
-    if (succ / questions.length < settings.value.minAccuracy) {
-      // 正确率不足：临时劫持 alert 吞掉平台弹窗，走「暂存不提交」；用完立刻还原，
+    if (succ / questions.length < settings.value.minAnswerRate) {
+      // 作答率不足：临时劫持 alert 吞掉平台弹窗，走「暂存不提交」；用完立刻还原，
       // 避免页面后续代码撞上非原生的 alert（toString 检查可发现劫持）
-      console.log(`[UHelper100] 正确率不足 ${succ}/${questions.length}，暂存不提交`);
+      console.log(`[UHelper100] 作答率不足 ${succ}/${questions.length}，暂存不提交`);
       const originalAlert = iframeWindow.alert;
       iframeWindow.alert = () => {};
       try {
@@ -125,10 +126,10 @@ export async function runChapterWork(iframeWindow: Window, isAborted: () => bool
       win.btnBlueSubmit?.();
       await sleep(3);
       win.submitCheckTimes?.();
-      console.log(`[UHelper100] 章节测验已提交，正确率 ${succ}/${questions.length}`);
+      console.log(`[UHelper100] 章节测验已提交，作答率 ${succ}/${questions.length}`);
     }
   } else {
-    console.log(`[UHelper100] 未开启自动提交，等待手动提交，正确率 ${succ}/${questions.length}`);
+    console.log(`[UHelper100] 未开启自动提交，等待手动提交，作答率 ${succ}/${questions.length}`);
   }
 }
 

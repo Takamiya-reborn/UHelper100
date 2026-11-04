@@ -38,7 +38,7 @@
       <div class="uh-field">
         <div class="uh-field-label">
           <label>章节测验自动提交</label>
-          <p>开启后，正确率达标会自动提交，不足则暂存</p>
+          <p>开启后，作答率达标会自动提交，不足则暂存</p>
         </div>
         <UhSwitch v-model="settings.autoSubmitChapter" />
       </div>
@@ -58,10 +58,10 @@
       </div>
       <div class="uh-field">
         <div class="uh-field-label">
-          <label>最低正确率</label>
-          <p>不满足最低正确率则不会自动提交，0-1</p>
+          <label>最低作答率</label>
+          <p>成功填涂题数占比（不代表答对），不满足则不自动提交，0-1</p>
         </div>
-        <UhInput v-model="settings.minAccuracy" type="number" :min="0" :max="1" :step="0.05" />
+        <UhInput v-model="settings.minAnswerRate" type="number" :min="0" :max="1" :step="0.05" />
       </div>
     </section>
   </div>

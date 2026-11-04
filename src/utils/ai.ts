@@ -14,7 +14,7 @@ export interface AiQuestion {
 }
 
 // 返回形状对齐 fillAnswer 的消费约定：
-// choice 题 answer 每项为选项原文（matchAnswer 精确匹配用）；
+// choice 题 answer 每项为选项字母编号（首选）或选项原文（matchAnswer 两种都接）；
 // 判断题 answer[0] 为「正确」/「错误」（命中 setAnswer 的同义词正则）；
 // 填空/简答 answer 每项对应一空
 export interface AnswerResult {
@@ -38,8 +38,6 @@ const TYPE_NAMES: Record<string, string> = {
 
 // 按题型给出最短作答指令：省 token，只要求输出答案本身（多选/多空用 # 分隔）
 const ANSWER_RULES: Record<string, string> = {
-  "0": "只输出正确选项的原文，不要解释。",
-  "1": "只输出所有正确选项的原文，用#分隔，不要解释。",
   "2": "只输出每空答案，用#分隔，不要解释。",
   "3": "只输出「正确」或「错误」。",
 };
@@ -49,8 +47,14 @@ function buildPrompt({ question, options, type }: AiQuestion): string {
   const lines = [`${TYPE_NAMES[type] ?? "未知"}：${question}`];
   if (options.length > 0) {
     lines.push(options.map((option, i) => `${String.fromCharCode(65 + i)}.${option}`).join("\n"));
+    // 单选/多选给到选项时只要求回字母编号：复述原文会被页面包装符号（引号等）卡住匹配，
+    // 字母编号与这里列出的选项一一对应，matchAnswer 按下标直取
+    if (type === "0") lines.push("只输出正确选项的字母编号，不要解释。");
+    else if (type === "1") lines.push("只输出所有正确选项的字母编号，用#分隔，不要解释。");
+    else lines.push(ANSWER_RULES[type] ?? DEFAULT_RULE);
+  } else {
+    lines.push(ANSWER_RULES[type] ?? DEFAULT_RULE);
   }
-  lines.push(ANSWER_RULES[type] ?? DEFAULT_RULE);
   return lines.join("\n");
 }
 

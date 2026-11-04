@@ -4994,7 +4994,7 @@
 		autoSubmitExam: true,
 		interval: 3,
 		answerInterval: 3,
-		minAccuracy: .8,
+		minAnswerRate: .8,
 		watchRate: 1,
 		aiBaseUrl: "",
 		aiKey: "",
@@ -5006,6 +5006,10 @@
 		legacy.autoSubmitChapter = legacy.autoSubmit;
 		legacy.autoSubmitExam = legacy.autoSubmit;
 		delete legacy.autoSubmit;
+	}
+	if (typeof legacy.minAccuracy === "number") {
+		if (typeof legacy.minAnswerRate !== "number") legacy.minAnswerRate = legacy.minAccuracy;
+		delete legacy.minAccuracy;
 	}
 	Object.assign(stored$1.value, {
 		...DEFAULT_SETTINGS,
@@ -5286,16 +5290,18 @@
 		"7": "计算题"
 	};
 	var ANSWER_RULES = {
-		"0": "只输出正确选项的原文，不要解释。",
-		"1": "只输出所有正确选项的原文，用#分隔，不要解释。",
 		"2": "只输出每空答案，用#分隔，不要解释。",
 		"3": "只输出「正确」或「错误」。"
 	};
 	var DEFAULT_RULE = "只输出答案，不要解释。";
 	function buildPrompt({ question, options, type }) {
 		const lines = [`${TYPE_NAMES[type] ?? "未知"}：${question}`];
-		if (options.length > 0) lines.push(options.map((option, i) => `${String.fromCharCode(65 + i)}.${option}`).join("\n"));
-		lines.push(ANSWER_RULES[type] ?? DEFAULT_RULE);
+		if (options.length > 0) {
+			lines.push(options.map((option, i) => `${String.fromCharCode(65 + i)}.${option}`).join("\n"));
+			if (type === "0") lines.push("只输出正确选项的字母编号，不要解释。");
+			else if (type === "1") lines.push("只输出所有正确选项的字母编号，用#分隔，不要解释。");
+			else lines.push(ANSWER_RULES[type] ?? DEFAULT_RULE);
+		} else lines.push(ANSWER_RULES[type] ?? DEFAULT_RULE);
 		return lines.join("\n");
 	}
 	var SYSTEM_PROMPT = "你是答题接口。只输出答案本身：不解释、不分析、不客套、不复述题目，禁止「答案是」等前缀。多空/多选用#分隔。";
@@ -5742,7 +5748,7 @@
 					}, null, 8, ["modelValue"])])
 				]), createBaseVNode("section", _hoisted_8$1, [
 					_cache[13] || (_cache[13] = createBaseVNode("h3", { class: "uh-group-title" }, "答题", -1)),
-					createBaseVNode("div", _hoisted_9$1, [_cache[9] || (_cache[9] = createBaseVNode("div", { class: "uh-field-label" }, [createBaseVNode("label", null, "章节测验自动提交"), createBaseVNode("p", null, "开启后，正确率达标会自动提交，不足则暂存")], -1)), createVNode(UhSwitch_default, {
+					createBaseVNode("div", _hoisted_9$1, [_cache[9] || (_cache[9] = createBaseVNode("div", { class: "uh-field-label" }, [createBaseVNode("label", null, "章节测验自动提交"), createBaseVNode("p", null, "开启后，作答率达标会自动提交，不足则暂存")], -1)), createVNode(UhSwitch_default, {
 						modelValue: unref(settings).autoSubmitChapter,
 						"onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => unref(settings).autoSubmitChapter = $event)
 					}, null, 8, ["modelValue"])]),
@@ -5758,9 +5764,9 @@
 						max: 60,
 						step: 1
 					}, null, 8, ["modelValue"])]),
-					createBaseVNode("div", _hoisted_12$1, [_cache[12] || (_cache[12] = createBaseVNode("div", { class: "uh-field-label" }, [createBaseVNode("label", null, "最低正确率"), createBaseVNode("p", null, "不满足最低正确率则不会自动提交，0-1")], -1)), createVNode(UhInput_default, {
-						modelValue: unref(settings).minAccuracy,
-						"onUpdate:modelValue": _cache[5] || (_cache[5] = ($event) => unref(settings).minAccuracy = $event),
+					createBaseVNode("div", _hoisted_12$1, [_cache[12] || (_cache[12] = createBaseVNode("div", { class: "uh-field-label" }, [createBaseVNode("label", null, "最低作答率"), createBaseVNode("p", null, "成功填涂题数占比（不代表答对），不满足则不自动提交，0-1")], -1)), createVNode(UhInput_default, {
+						modelValue: unref(settings).minAnswerRate,
+						"onUpdate:modelValue": _cache[5] || (_cache[5] = ($event) => unref(settings).minAnswerRate = $event),
 						type: "number",
 						min: 0,
 						max: 1,
@@ -6061,10 +6067,14 @@
 	function cleanAiText(item) {
 		return removeHtml(item).replace(/^(正确答案|参考答案|答案是|答案为|答案|选)[:：是]?\s*/, "").replace(/[。．、，,\s]+$/, "").trim();
 	}
+	function normalizeForMatch(text) {
+		return text.replace(/[\s“”„‟‘’「」『』"']/g, "");
+	}
 	function matchAnswer(answer, options) {
 		const matched = [];
+		const normalizedOptions = options.map(normalizeForMatch);
 		for (const item of answer) {
-			const text = cleanAiText(item);
+			const text = normalizeForMatch(cleanAiText(item));
 			const letterMatch = text.match(/^([A-Ga-g])[.、．。:：]?$/);
 			if (letterMatch) {
 				const index = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
@@ -6072,13 +6082,13 @@
 				continue;
 			}
 			let exact = false;
-			for (let j = 0; j < options.length; j++) if (text === options[j]) {
+			for (let j = 0; j < options.length; j++) if (normalizedOptions[j].length > 0 && text === normalizedOptions[j]) {
 				matched.push(j);
 				exact = true;
 			}
 			if (exact) continue;
-			const candidates = options.map((option, j) => option.length >= 2 && text.includes(option) ? j : -1).filter((j) => j >= 0);
-			if (candidates.length > 0) matched.push(candidates.reduce((a, b) => options[b].length > options[a].length ? b : a));
+			const candidates = normalizedOptions.map((option, j) => option.length >= 2 && text.includes(option) ? j : -1).filter((j) => j >= 0);
+			if (candidates.length > 0) matched.push(candidates.reduce((a, b) => normalizedOptions[b].length > normalizedOptions[a].length ? b : a));
 		}
 		return matched;
 	}
@@ -30271,8 +30281,8 @@
 		if (isAborted()) return;
 		const win = iframeWindow;
 		if (settings.value.autoSubmitChapter) {
-			if (succ / questions.length < settings.value.minAccuracy) {
-				console.log(`[UHelper100] 正确率不足 ${succ}/${questions.length}，暂存不提交`);
+			if (succ / questions.length < settings.value.minAnswerRate) {
+				console.log(`[UHelper100] 作答率不足 ${succ}/${questions.length}，暂存不提交`);
 				const originalAlert = iframeWindow.alert;
 				iframeWindow.alert = () => {};
 				try {
@@ -30284,9 +30294,9 @@
 				win.btnBlueSubmit?.();
 				await sleep(3);
 				win.submitCheckTimes?.();
-				console.log(`[UHelper100] 章节测验已提交，正确率 ${succ}/${questions.length}`);
+				console.log(`[UHelper100] 章节测验已提交，作答率 ${succ}/${questions.length}`);
 			}
-		} else console.log(`[UHelper100] 未开启自动提交，等待手动提交，正确率 ${succ}/${questions.length}`);
+		} else console.log(`[UHelper100] 未开启自动提交，等待手动提交，作答率 ${succ}/${questions.length}`);
 	}
 	async function runHomework() {
 		if (!assertAiReady("作业")) return;

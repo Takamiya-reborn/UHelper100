@@ -29,13 +29,21 @@ function cleanAiText(item: string): string {
     .trim();
 }
 
+// 匹配归一化：页面选项常包一层引号（如“台湾属于中国”），AI 回复通常不带，
+// 比对前双方统一剥掉引号与空白，避免纯包装符号导致失配
+function normalizeForMatch(text: string): string {
+  return text.replace(/[\s“”„‟‘’「」『』"']/g, "");
+}
+
 // 答案项与选项匹配得下标，逐级放宽：
-// 1) 原文精确匹配（原版行为）；2) 单字母 A-G（可带分隔符）按下标映射；
+// 1) 归一化后精确匹配（原版为原文精确匹配）；2) 单字母 A-G（可带分隔符）按下标映射；
 // 3) 兜底「包含选项原文」，多命中取最长（AI 回复带修饰文字时用，≥2 字防误命中短选项）
 export function matchAnswer(answer: string[], options: string[]): number[] {
   const matched: number[] = [];
+  // 长度阈值与「取最长」都用归一化后的选项，防止剥掉包装引号后长短关系变化
+  const normalizedOptions = options.map(normalizeForMatch);
   for (const item of answer) {
-    const text = cleanAiText(item);
+    const text = normalizeForMatch(cleanAiText(item));
     const letterMatch = text.match(/^([A-Ga-g])[.、．。:：]?$/);
     if (letterMatch) {
       const index = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
@@ -44,17 +52,19 @@ export function matchAnswer(answer: string[], options: string[]): number[] {
     }
     let exact = false;
     for (let j = 0; j < options.length; j++) {
-      if (text === options[j]) {
+      if (normalizedOptions[j].length > 0 && text === normalizedOptions[j]) {
         matched.push(j);
         exact = true;
       }
     }
     if (exact) continue;
-    const candidates = options
+    const candidates = normalizedOptions
       .map((option, j) => (option.length >= 2 && text.includes(option) ? j : -1))
       .filter((j) => j >= 0);
     if (candidates.length > 0) {
-      matched.push(candidates.reduce((a, b) => (options[b].length > options[a].length ? b : a)));
+      matched.push(
+        candidates.reduce((a, b) => (normalizedOptions[b].length > normalizedOptions[a].length ? b : a)),
+      );
     }
   }
   return matched;
